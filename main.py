@@ -1,8 +1,10 @@
 from flask import Flask, Response
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse, urlunparse
+import os
+import json
 
 app = Flask(__name__)
 
@@ -15,12 +17,22 @@ feeds = [
     {"name": "Carioca", "url": "https://ge.globo.com/busca/?q=Carioca&order=recent&species=not%C3%ADcias&from=now-1w"}
 ]
 
-# Cache global para links e títulos processados
-cache_links = {}
-cache_titles = {}
+CACHE_FILE = "cache.json"
+
+# Carrega o cache existente ou cria um novo
+if os.path.exists(CACHE_FILE):
+    with open(CACHE_FILE, "r") as f:
+        cache = json.load(f)
+else:
+    cache = {}
+
+def save_cache():
+    """Salva o cache no disco."""
+    with open(CACHE_FILE, "w") as f:
+        json.dump(cache, f)
 
 def normalize_url(url):
-    """Remove parâmetros desnecessários dos links para evitar duplicatas."""
+    """Remove parâmetros desnecessários dos links."""
     parsed_url = urlparse(url)
     clean_url = urlunparse((parsed_url.scheme, parsed_url.netloc, parsed_url.path, "", "", ""))
     return clean_url
@@ -33,33 +45,35 @@ def gerar_rss(feed):
     title_selector = "div.widget--info__title"
     url_selector = "a"
 
-    rss_items = ""
+    # Inicializa o cache para o feed, se não existir
+    if feed["name"] not in cache:
+        cache[feed["name"]] = {"links": set(), "titles": set()}
 
-    # Inicializa o cache do feed se não existir
-    if feed["name"] not in cache_links:
-        cache_links[feed["name"]] = set()
-        cache_titles[feed["name"]] = set()
+    rss_items = ""
+    now = datetime.utcnow()
 
     for item in soup.select(item_selector):
         title = item.select_one(title_selector).get_text(strip=True) if item.select_one(title_selector) else "Sem título"
         link = item.select_one(url_selector)["href"] if item.select_one(url_selector) else "#"
         link = normalize_url(link)
 
-        # Verifica duplicação baseada em link e título
-        if link in cache_links[feed["name"]] or title in cache_titles[feed["name"]]:
-            continue  # Ignora notícias duplicadas
+        # Verifica duplicação por link e título
+        if link in cache[feed["name"]]["links"] or title in cache[feed["name"]]["titles"]:
+            continue
 
         # Adiciona ao cache e ao feed
-        cache_links[feed["name"]].add(link)
-        cache_titles[feed["name"]].add(title)
+        cache[feed["name"]]["links"].add(link)
+        cache[feed["name"]]["titles"].add(title)
         rss_items += f"""
         <item>
           <title>{title}</title>
           <link>{link}</link>
-          <pubDate>{datetime.now().strftime('%a, %d %b %Y %H:%M:%S GMT')}</pubDate>
+          <pubDate>{now.strftime('%a, %d %b %Y %H:%M:%S GMT')}</pubDate>
         </item>
         """
 
+    # Salva o cache após processar
+    save_cache()
     return rss_items
 
 @app.route("/<team>")
@@ -74,7 +88,7 @@ def feed(team):
         <link>{feed['url']}</link>
         <description>Feed de notícias recentes do {feed['name']} no site ge.globo.com</description>
         <language>pt-BR</language>
-        <lastBuildDate>{datetime.now().strftime('%a, %d %b %Y %H:%M:%S GMT')}</lastBuildDate>
+        <lastBuildDate>{datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')}</lastBuildDate>
         {gerar_rss(feed)}
       </channel>
     </rss>"""
