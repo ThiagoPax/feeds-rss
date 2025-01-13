@@ -1,7 +1,7 @@
 from flask import Flask, Response
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 from urllib.parse import urlparse, urlunparse
 import os
 import json
@@ -14,7 +14,8 @@ feeds = [
     {"name": "Flamengo", "url": "https://ge.globo.com/busca/?q=Flamengo&order=recent&species=not%C3%ADcias"},
     {"name": "Vasco", "url": "https://ge.globo.com/busca/?q=Vasco&order=recent&species=not%C3%ADcias"},
     {"name": "Fluminense", "url": "https://ge.globo.com/busca/?q=Fluminense&order=recent&species=not%C3%ADcias"},
-    {"name": "Carioca", "url": "https://ge.globo.com/busca/?q=Carioca&order=recent&species=not%C3%ADcias&from=now-1w"}
+    {"name": "Carioca", "url": "https://ge.globo.com/busca/?q=Carioca&order=recent&species=not%C3%ADcias&from=now-1w"},
+    {"name": "Vannucci", "url": "https://canaldovannucci.com.br/colunas-e-blogs/coluna-do-vannucci/"}
 ]
 
 CACHE_FILE = "cache.json"
@@ -41,9 +42,16 @@ def gerar_rss(feed):
     response = requests.get(feed["url"])
     soup = BeautifulSoup(response.text, "html.parser")
 
-    item_selector = "li.widget--card.widget--info"
-    title_selector = "div.widget--info__title"
-    url_selector = "a"
+    if feed["name"] == "Vannucci":
+        item_selector = "div.p-wrap"
+        title_selector = "h3.entry-title a"
+        url_selector = "h3.entry-title a"
+        date_selector = "time.updated"
+    else:
+        item_selector = "li.widget--card.widget--info"
+        title_selector = "div.widget--info__title"
+        url_selector = "a"
+        date_selector = None
 
     # Inicializa o cache para o feed, se não existir
     if feed["name"] not in cache:
@@ -57,6 +65,12 @@ def gerar_rss(feed):
         link = item.select_one(url_selector)["href"] if item.select_one(url_selector) else "#"
         link = normalize_url(link)
 
+        pub_date = (
+            item.select_one(date_selector)["datetime"]
+            if date_selector and item.select_one(date_selector)
+            else now.strftime('%a, %d %b %Y %H:%M:%S GMT')
+        )
+
         # Verifica duplicação por link e título
         if link in cache[feed["name"]]["links"] or title in cache[feed["name"]]["titles"]:
             continue
@@ -68,7 +82,7 @@ def gerar_rss(feed):
         <item>
           <title>{title}</title>
           <link>{link}</link>
-          <pubDate>{now.strftime('%a, %d %b %Y %H:%M:%S GMT')}</pubDate>
+          <pubDate>{pub_date}</pubDate>
         </item>
         """
 
@@ -84,9 +98,9 @@ def feed(team):
     rss_content = f"""<?xml version="1.0" encoding="UTF-8" ?>
     <rss version="2.0">
       <channel>
-        <title>Notícias do {feed['name']} - ge.globo.com</title>
+        <title>Notícias do {feed['name']}</title>
         <link>{feed['url']}</link>
-        <description>Feed de notícias recentes do {feed['name']} no site ge.globo.com</description>
+        <description>Feed de notícias recentes do {feed['name']}</description>
         <language>pt-BR</language>
         <lastBuildDate>{datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')}</lastBuildDate>
         {gerar_rss(feed)}
