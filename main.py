@@ -14,8 +14,7 @@ feeds = [
     {"name": "Flamengo", "url": "https://ge.globo.com/busca/?q=Flamengo&order=recent&species=not%C3%ADcias"},
     {"name": "Vasco", "url": "https://ge.globo.com/busca/?q=Vasco&order=recent&species=not%C3%ADcias"},
     {"name": "Fluminense", "url": "https://ge.globo.com/busca/?q=Fluminense&order=recent&species=not%C3%ADcias"},
-    {"name": "Carioca", "url": "https://ge.globo.com/busca/?q=Carioca&order=recent&species=not%C3%ADcias&from=now-1w"},
-    {"name": "FlavioRicco", "url": "https://portalleodias.com/colunas/flavio-ricco"}
+    {"name": "Carioca", "url": "https://ge.globo.com/busca/?q=Carioca&order=recent&species=not%C3%ADcias&from=now-1w"}
 ]
 
 CACHE_FILE = "cache.json"
@@ -42,15 +41,9 @@ def gerar_rss(feed):
     response = requests.get(feed["url"])
     soup = BeautifulSoup(response.text, "html.parser")
 
-    # Ajustar seletores conforme o feed
-    if feed["name"] == "FlavioRicco":
-        item_selector = "div.col-md-8 div.td-module-thumb a"
-        title_selector = None  # O título é capturado diretamente do atributo "title"
-        url_selector = "a"
-    else:
-        item_selector = "li.widget--card.widget--info"
-        title_selector = "div.widget--info__title"
-        url_selector = "a"
+    item_selector = "li.widget--card.widget--info"
+    title_selector = "div.widget--info__title"
+    url_selector = "a"
 
     # Inicializa o cache para o feed, se não existir
     if feed["name"] not in cache:
@@ -60,13 +53,8 @@ def gerar_rss(feed):
     now = datetime.utcnow()
 
     for item in soup.select(item_selector):
-        if feed["name"] == "FlavioRicco":
-            title = item["title"].strip() if "title" in item.attrs else "Sem título"
-            link = item["href"] if "href" in item.attrs else "#"
-        else:
-            title = item.select_one(title_selector).get_text(strip=True) if item.select_one(title_selector) else "Sem título"
-            link = item.select_one(url_selector)["href"] if item.select_one(url_selector) else "#"
-
+        title = item.select_one(title_selector).get_text(strip=True) if item.select_one(title_selector) else "Sem título"
+        link = item.select_one(url_selector)["href"] if item.select_one(url_selector) else "#"
         link = normalize_url(link)
 
         # Verifica duplicação por link e título
@@ -96,9 +84,9 @@ def feed(team):
     rss_content = f"""<?xml version="1.0" encoding="UTF-8" ?>
     <rss version="2.0">
       <channel>
-        <title>Notícias do {feed['name']} - Fonte</title>
+        <title>Notícias do {feed['name']} - ge.globo.com</title>
         <link>{feed['url']}</link>
-        <description>Feed de notícias recentes do {feed['name']}.</description>
+        <description>Feed de notícias recentes do {feed['name']} no site ge.globo.com</description>
         <language>pt-BR</language>
         <lastBuildDate>{datetime.utcnow().strftime('%a, %d %b %Y %H:%M:%S GMT')}</lastBuildDate>
         {gerar_rss(feed)}
